@@ -32,7 +32,7 @@ jobs:
         echo "BRANCH=$BRANCH" >> $GITHUB_ENV
         
         # Extract issue number from the PR description
-        ORIGINAL_ISSUE_NUMBER=$(echo '${{ github.event.pull_request.body }}'' | grep -oE 'longhorn/longhorn#[0-9]+' | cut -d'#' -f2)
+        ORIGINAL_ISSUE_NUMBER=$(echo "${{ github.event.pull_request.body }}" | grep -oE 'longhorn/longhorn#[0-9]+' | cut -d'#' -f2 | head -1)
         echo "ORIGINAL_ISSUE_NUMBER=$ORIGINAL_ISSUE_NUMBER" >> $GITHUB_ENV
 
     - name: Link the PR with the backport issue
@@ -44,10 +44,10 @@ jobs:
           echo "Found source issue longhorn/longhorn#${issue_number}"
           issue_title=$(gh issue view "$issue_number" --repo longhorn/longhorn --json 'title' -q '.title')
         
-          if [[ $? -eq 0 && -n "$issue_number" ]]; then
+          if [[ $? -eq 0 && -n "$issue_title" ]]; then
             backport_issue_number=$(
               curl -s "https://api.github.com/search/issues?q=repo:longhorn/longhorn+is:open+is:issue+in:title+${{ env.BRANCH }}+\"${issue_title}\"" \
-              | jq .items[0].number
+              | jq -r '.items[0].number // empty'
             )
 
             if [[ -n "$backport_issue_number" ]]; then
