@@ -15,8 +15,10 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Check if PR is a backport
+      env:
+        PR_TITLE: ${{ github.event.pull_request.title }}
       run: |
-        if [[ "$(echo "${{ github.event.pull_request.title }}" | sed 's/"/\\"/g')" =~ "backport #" ]]; then
+        if [[ "$PR_TITLE" =~ "backport #" ]]; then
           echo "BACKPORT=true" >> $GITHUB_ENV
         else
           echo "BACKPORT=false" >> $GITHUB_ENV
@@ -24,23 +26,27 @@ jobs:
 
     - name: Extract backport branch and issue number
       if: env.BACKPORT == 'true'
+      env:
+        PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        PR_BODY: ${{ github.event.pull_request.body }}
       run: |
         # Extract branch from the target branch of the PR
-        BRANCH=$(echo "${{ github.event.pull_request.base.ref }}")
+        BRANCH="$PR_BASE_REF"
         BRANCH=${BRANCH%.x}   # Remove the '.x' suffix
         BRANCH=$(echo "${BRANCH}" | sed 's/\./\\./g')   # Escape periods
         echo "BRANCH=$BRANCH" >> $GITHUB_ENV
         
         # Extract issue number from the PR description
-        ORIGINAL_ISSUE_NUMBER=$(echo '${{ github.event.pull_request.body }}'' | grep -oE 'longhorn/longhorn#[0-9]+' | cut -d'#' -f2)
+        ORIGINAL_ISSUE_NUMBER=$(echo "$PR_BODY" | grep -oE 'longhorn/longhorn#[0-9]+' | cut -d'#' -f2)
         echo "ORIGINAL_ISSUE_NUMBER=$ORIGINAL_ISSUE_NUMBER" >> $GITHUB_ENV
 
     - name: Link the PR with the backport issue
       if: ${{ env.BACKPORT == 'true' && env.ORIGINAL_ISSUE_NUMBER != '' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        PR_URL: ${{ github.event.pull_request.html_url }}
       run: |
-        for issue_number in "${{ env.ORIGINAL_ISSUE_NUMBER }}"; do
+        for issue_number in ${{ env.ORIGINAL_ISSUE_NUMBER }}; do
           echo "Found source issue longhorn/longhorn#${issue_number}"
           issue_title=$(gh issue view "$issue_number" --repo longhorn/longhorn --json 'title' -q '.title')
         
@@ -50,10 +56,10 @@ jobs:
               | jq .items[0].number
             )
 
-            if [[ -n "$backport_issue_number" ]]; then
+            if [[ -n "$backport_issue_number" && "$backport_issue_number" != "null" ]]; then
               echo "Found backport issue longhorn/longhorn#${backport_issue_number}"
               echo "Linking backport issue longhorn/longhorn#${backport_issue_number}"
-              gh issue comment --repo longhorn/longhorn "${backport_issue_number}" --body "Backport PR: ${{ github.event.pull_request.html_url }}"
+              gh issue comment --repo longhorn/longhorn "${backport_issue_number}" --body "Backport PR: ${PR_URL}"
               continue
             fi
           fi
